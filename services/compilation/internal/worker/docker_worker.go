@@ -4,17 +4,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/texflow/services/compilation/internal/models"
-	"github.com/texflow/services/compilation/internal/storage"
+	"compilation/internal/models"
+	"compilation/internal/storage"
 	"go.uber.org/zap"
 )
 
@@ -86,7 +86,7 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 	timeoutCtx, cancel := context.WithTimeout(ctx, w.timeout)
 	defer cancel()
 
-	if err := w.dockerClient.ContainerStart(timeoutCtx, containerID, container.StartOptions{}); err != nil {
+	if err := w.dockerClient.ContainerStart(timeoutCtx, containerID, types.ContainerStartOptions{}); err != nil {
 		return nil, fmt.Errorf("failed to start container: %w", err)
 	}
 
@@ -232,7 +232,7 @@ func (w *DockerWorker) createContainer(ctx context.Context, projectDir, compiler
 
 // cleanupContainer removes a Docker container
 func (w *DockerWorker) cleanupContainer(ctx context.Context, containerID string) {
-	if err := w.dockerClient.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+	if err := w.dockerClient.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
 		w.logger.Error("Failed to remove container", zap.String("container_id", containerID), zap.Error(err))
 	}
 }

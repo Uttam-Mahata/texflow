@@ -5,12 +5,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/texflow/services/websocket/pkg/auth"
+	"compilation/pkg/auth"
 	"go.uber.org/zap"
 )
 
 // AuthMiddleware validates JWT tokens for WebSocket connections
-func AuthMiddleware(jwtValidator *auth.JWTValidator, logger *zap.Logger) gin.HandlerFunc {
+func AuthMiddleware(jwtValidator *auth.JWTManager, logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get token from query parameter (for WebSocket upgrade) or header
 		token := c.Query("token")

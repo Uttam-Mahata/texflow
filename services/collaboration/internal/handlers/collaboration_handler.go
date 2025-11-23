@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/texflow/services/collaboration/internal/models"
-	"github.com/texflow/services/collaboration/internal/service"
+	"collaboration/internal/models"
+	"collaboration/internal/service"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )

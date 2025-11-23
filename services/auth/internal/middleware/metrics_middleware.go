@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/texflow/services/auth/pkg/metrics"
+	"auth/pkg/metrics"
 )
 
 // MetricsMiddleware records HTTP metrics

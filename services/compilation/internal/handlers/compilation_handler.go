@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/texflow/services/compilation/internal/models"
-	"github.com/texflow/services/compilation/internal/service"
+	"compilation/internal/models"
+	"compilation/internal/service"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )

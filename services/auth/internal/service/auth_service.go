@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/texflow/services/auth/internal/models"
-	"github.com/texflow/services/auth/internal/repository"
-	"github.com/texflow/services/auth/pkg/auth"
+	"auth/internal/models"
+	"auth/internal/repository"
+	"auth/pkg/auth"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
