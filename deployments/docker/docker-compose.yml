@@ -103,6 +103,27 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  # Kong Config
+  kong-config:
+    image: kong:3.4
+    container_name: texflow-kong-config
+    command: kong config db_import /config/kong.yml
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    volumes:
+      - ../../infrastructure/kong/kong.yml:/config/kong.yml
+    networks:
+      - texflow-network
+    depends_on:
+      kong-migration:
+        condition: service_completed_successfully
+      kong-database:
+        condition: service_healthy
+
   # Kong API Gateway
   kong:
     image: kong:3.4
