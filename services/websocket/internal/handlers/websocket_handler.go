@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fmt"
+
 	"math/rand"
 	"net/http"
 	"strings"
