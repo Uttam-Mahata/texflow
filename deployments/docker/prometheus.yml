@@ -1,0 +1,81 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'texflow-monitor'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Auth Service
+  - job_name: 'auth-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['auth-service:8080']
+        labels:
+          service: 'auth-service'
+
+  # Project Service
+  - job_name: 'project-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['project-service:8081']
+        labels:
+          service: 'project-service'
+
+  # WebSocket Service
+  - job_name: 'websocket-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['websocket-service:8082']
+        labels:
+          service: 'websocket-service'
+
+  # Collaboration Service
+  - job_name: 'collaboration-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['collaboration-service:8083']
+        labels:
+          service: 'collaboration-service'
+
+  # Compilation Service
+  - job_name: 'compilation-service'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['compilation-service:8084']
+        labels:
+          service: 'compilation-service'
+
+  # MongoDB Exporter (if you add it)
+  # - job_name: 'mongodb'
+  #   static_configs:
+  #     - targets: ['mongodb-exporter:9216']
+
+  # Redis Exporter (if you add it)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+  # MinIO Metrics
+  - job_name: 'minio'
+    metrics_path: '/minio/v2/metrics/cluster'
+    static_configs:
+      - targets: ['minio:9000']
+        labels:
+          service: 'minio'
