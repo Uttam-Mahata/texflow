@@ -1,0 +1,368 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # Infrastructure Services
+  # ============================================
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: texflow-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+    networks:
+      - texflow-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache and Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: texflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redispassword
+    volumes:
+      - redis-data:/data
+    networks:
+      - texflow-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: texflow-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - texflow-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Kong Database
+  kong-database:
+    image: postgres:15-alpine
+    container_name: texflow-kong-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kong
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+    volumes:
+      - kong-db-data:/var/lib/postgresql/data
+    networks:
+      - texflow-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kong Migration
+  kong-migration:
+    image: kong:3.4
+    container_name: texflow-kong-migration
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    networks:
+      - texflow-network
+    depends_on:
+      kong-database:
+        condition: service_healthy
+    restart: on-failure
+
+  # Kong API Gateway
+  kong:
+    image: kong:3.4
+    container_name: texflow-kong
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # Proxy
+      - "8001:8001"  # Admin API
+      - "8443:8443"  # Proxy SSL
+      - "8444:8444"  # Admin API SSL
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+    networks:
+      - texflow-network
+    depends_on:
+      kong-database:
+        condition: service_healthy
+      kong-migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: texflow-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - texflow-network
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: texflow-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - texflow-network
+    depends_on:
+      - prometheus
+
+  # ============================================
+  # Application Services
+  # ============================================
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ../../services/auth
+      dockerfile: Dockerfile
+    container_name: texflow-auth-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ENVIRONMENT: production
+      AUTH_SERVICE_PORT: 8080
+      MONGO_URI: mongodb://admin:password@mongodb:27017
+      MONGO_DATABASE: texflow
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: redispassword
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      LOG_LEVEL: info
+    networks:
+      - texflow-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Project Service
+  project-service:
+    build:
+      context: ../../services/project
+      dockerfile: Dockerfile
+    container_name: texflow-project-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ENVIRONMENT: production
+      PROJECT_SERVICE_PORT: 8081
+      MONGO_URI: mongodb://admin:password@mongodb:27017
+      MONGO_DATABASE: texflow
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: redispassword
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: texflow
+      MINIO_USE_SSL: "false"
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      LOG_LEVEL: info
+    networks:
+      - texflow-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # WebSocket Service
+  websocket-service:
+    build:
+      context: ../../services/websocket
+      dockerfile: Dockerfile
+    container_name: texflow-websocket-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      ENVIRONMENT: production
+      WEBSOCKET_SERVICE_PORT: 8082
+      MONGO_URI: mongodb://admin:password@mongodb:27017
+      MONGO_DATABASE: texflow
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: redispassword
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      LOG_LEVEL: info
+    networks:
+      - texflow-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Collaboration Service
+  collaboration-service:
+    build:
+      context: ../../services/collaboration
+      dockerfile: Dockerfile
+    container_name: texflow-collaboration-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      ENVIRONMENT: production
+      COLLABORATION_SERVICE_PORT: 8083
+      MONGO_URI: mongodb://admin:password@mongodb:27017
+      MONGO_DATABASE: texflow
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: redispassword
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      LOG_LEVEL: info
+    networks:
+      - texflow-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Compilation Service
+  compilation-service:
+    build:
+      context: ../../services/compilation
+      dockerfile: Dockerfile
+    container_name: texflow-compilation-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      ENVIRONMENT: production
+      COMPILATION_SERVICE_PORT: 8084
+      MONGO_URI: mongodb://admin:password@mongodb:27017
+      MONGO_DATABASE: texflow
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: redispassword
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: texflow
+      MINIO_USE_SSL: "false"
+      COMPILATION_TIMEOUT: 30s
+      COMPILATION_MEMORY_LIMIT: 2147483648
+      COMPILATION_CPU_LIMIT: 2
+      MAX_COMPILATION_WORKERS: 10
+      LOG_LEVEL: info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - texflow-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  texflow-network:
+    driver: bridge
+
+volumes:
+  mongodb-data:
+  mongodb-config:
+  redis-data:
+  minio-data:
+  kong-db-data:
+  prometheus-data:
+  grafana-data:
