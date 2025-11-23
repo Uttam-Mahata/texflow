@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/texflow/services/compilation/internal/models"
-	"github.com/texflow/services/compilation/internal/queue"
-	"github.com/texflow/services/compilation/internal/repository"
-	"github.com/texflow/services/compilation/internal/storage"
-	"github.com/texflow/services/compilation/internal/worker"
+	"compilation/internal/models"
+	"compilation/internal/queue"
+	"compilation/internal/repository"
+	"compilation/internal/storage"
+	"compilation/internal/worker"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )

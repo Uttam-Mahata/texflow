@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/texflow/services/compilation/internal/models"
+	"compilation/internal/models"
 	"go.uber.org/zap"
 )
 

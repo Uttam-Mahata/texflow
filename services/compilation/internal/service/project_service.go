@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/texflow/services/compilation/internal/storage"
+	"compilation/internal/storage"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"

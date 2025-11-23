@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/texflow/services/auth/internal/models"
-	"github.com/texflow/services/auth/internal/service"
+	"auth/internal/models"
+	"auth/internal/service"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )
