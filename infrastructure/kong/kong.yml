@@ -1,0 +1,167 @@
+_format_version: "3.0"
+services:
+  - name: auth-service
+    url: http://auth-service:8080
+    routes:
+      - name: auth-routes
+        paths:
+          - /api/v1/auth
+        strip_path: false
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Accept
+            - Accept-Version
+            - Content-Length
+            - Content-MD5
+            - Content-Type
+            - Date
+            - Authorization
+            - X-Refresh-Token
+          exposed_headers:
+            - X-Auth-Token
+          credentials: true
+          max_age: 3600
+      - name: rate-limiting
+        config:
+          minute: 60
+          policy: local
+
+  - name: project-service
+    url: http://project-service:8081
+    routes:
+      - name: project-routes
+        paths:
+          - /api/v1/projects
+        strip_path: false
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Accept
+            - Accept-Version
+            - Content-Length
+            - Content-MD5
+            - Content-Type
+            - Date
+            - Authorization
+          credentials: true
+          max_age: 3600
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+      # - name: jwt
+      #   config:
+      #     claims_to_verify:
+      #       - exp
+
+  - name: websocket-service
+    url: http://websocket-service:8082
+    routes:
+      - name: websocket-routes
+        paths:
+          - /api/v1/ws
+        strip_path: false
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - OPTIONS
+          headers:
+            - Accept
+            - Accept-Version
+            - Content-Length
+            - Content-MD5
+            - Content-Type
+            - Date
+            - Authorization
+            - Upgrade
+            - Connection
+            - Sec-WebSocket-Key
+            - Sec-WebSocket-Version
+            - Sec-WebSocket-Extensions
+            - Sec-WebSocket-Protocol
+          credentials: true
+          max_age: 3600
+
+  - name: collaboration-service
+    url: http://collaboration-service:8083
+    routes:
+      - name: collaboration-routes
+        paths:
+          - /api/v1/collaboration
+        strip_path: false
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - OPTIONS
+          headers:
+            - Accept
+            - Accept-Version
+            - Content-Length
+            - Content-MD5
+            - Content-Type
+            - Date
+            - Authorization
+          credentials: true
+          max_age: 3600
+
+  - name: compilation-service
+    url: http://compilation-service:8084
+    routes:
+      - name: compilation-routes
+        paths:
+          - /api/v1/compilation
+        strip_path: false
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - OPTIONS
+          headers:
+            - Accept
+            - Accept-Version
+            - Content-Length
+            - Content-MD5
+            - Content-Type
+            - Date
+            - Authorization
+          credentials: true
+          max_age: 3600
+      - name: rate-limiting
+        config:
+          minute: 20
+          policy: local
