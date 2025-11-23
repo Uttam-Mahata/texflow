@@ -41,13 +41,13 @@ clean: ## Clean build artifacts
 	find . -name "*.log" -delete
 
 docker-up: ## Start all services with Docker Compose
-	docker-compose -f deployments/docker/docker-compose.yml up -d
+	docker compose -f deployments/docker/docker-compose.yml up -d
 
 docker-down: ## Stop all services
-	docker-compose -f deployments/docker/docker-compose.yml down
+	docker compose -f deployments/docker/docker-compose.yml down
 
 docker-logs: ## View logs from all services
-	docker-compose -f deployments/docker/docker-compose.yml logs -f
+	docker compose -f deployments/docker/docker-compose.yml logs -f
 
 init-db: ## Initialize database with indexes
 	go run scripts/init-db.go

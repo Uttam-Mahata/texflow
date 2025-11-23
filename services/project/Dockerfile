@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache git
 
 # Copy go mod files
-COPY go.mod go.sum* ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/main.g
 # Runtime stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates wget
+RUN apk --no-cache add ca-certificates
 
 WORKDIR /root/
 
@@ -27,10 +27,10 @@ WORKDIR /root/
 COPY --from=builder /app/main .
 
 # Copy keys directory if exists
-COPY --from=builder /app/keys ./keys 2>/dev/null || true
+COPY --from=builder /app/keys ./keys
 
 # Expose port
-EXPOSE 8083
+EXPOSE 8081
 
 # Run the application
 CMD ["./main"]
