@@ -141,12 +141,16 @@ func setupRouter(
 	// Metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// WebSocket stats endpoint (requires auth)
-	router.GET("/stats", middleware.AuthMiddleware(jwtValidator, log), wsHandler.GetStats)
+	// API v1 routes
+	v1 := router.Group("/api/v1")
+	{
+		// WebSocket stats endpoint (requires auth)
+		v1.GET("/stats", middleware.AuthMiddleware(jwtValidator, log), wsHandler.GetStats)
 
-	// WebSocket connection endpoint
-	// Note: Authentication is handled via query parameter or header
-	router.GET("/ws/:project_id", middleware.AuthMiddleware(jwtValidator, log), wsHandler.HandleConnection)
+		// WebSocket connection endpoint
+		// Note: Authentication is handled via query parameter or header
+		v1.GET("/ws/:project_id", middleware.AuthMiddleware(jwtValidator, log), wsHandler.HandleConnection)
+	}
 
 	return router
 }
