@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/texflow/services/websocket/pkg/auth"
+	"collaboration/pkg/auth"
 	"go.uber.org/zap"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/texflow/services/compilation/internal/models"
+	"compilation/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
