@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/texflow/services/collaboration/internal/models"
-	"github.com/texflow/services/collaboration/internal/repository"
+	"collaboration/internal/models"
+	"collaboration/internal/repository"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )

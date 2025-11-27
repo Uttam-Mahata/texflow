@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ WORKDIR /root/
 COPY --from=builder /app/main .
 
 # Copy keys directory if exists
-COPY --from=builder /app/keys ./keys 2>/dev/null || true
+COPY --from=builder /app/keys ./keys
 
 # Expose port
 EXPOSE 8082

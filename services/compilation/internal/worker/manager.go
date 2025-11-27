@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/texflow/services/compilation/internal/models"
-	"github.com/texflow/services/compilation/internal/queue"
-	"github.com/texflow/services/compilation/internal/repository"
+	"compilation/internal/models"
+	"compilation/internal/queue"
+	"compilation/internal/repository"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )
@@ -141,7 +141,7 @@ func (m *Manager) processJob(ctx context.Context, workerID string, job *models.C
 	}
 
 	// Update status to running
-	if err := m.repo.UpdateStatus(ctx, compilationID, models.StatusRunning, "", ""); err != nil {
+	if err := m.repo.UpdateStatus(ctx, compilationID, models.StatusRunning); err != nil {
 		m.logger.Error("Failed to update compilation status to running",
 			zap.String("compilation_id", job.CompilationID),
 			zap.Error(err),
@@ -160,7 +160,12 @@ func (m *Manager) processJob(ctx context.Context, workerID string, job *models.C
 			zap.Error(err),
 		)
 
-		updateErr := m.repo.UpdateStatus(ctx, compilationID, models.StatusFailed, "", err.Error())
+		failResult := &models.CompilationResult{
+			Status:       models.StatusFailed,
+			ErrorMessage: err.Error(),
+		}
+
+		updateErr := m.repo.UpdateResult(ctx, compilationID, failResult)
 		if updateErr != nil {
 			m.logger.Error("Failed to update compilation status to failed",
 				zap.String("compilation_id", job.CompilationID),
@@ -171,26 +176,16 @@ func (m *Manager) processJob(ctx context.Context, workerID string, job *models.C
 		m.logger.Info("Compilation completed successfully",
 			zap.String("compilation_id", job.CompilationID),
 			zap.String("output_url", result.OutputURL),
-			zap.Duration("duration", result.Duration),
+			zap.Int64("duration_ms", result.DurationMs),
 		)
 
-		updateErr := m.repo.UpdateStatus(
+		updateErr := m.repo.UpdateResult(
 			ctx,
 			compilationID,
-			models.StatusCompleted,
-			result.OutputURL,
-			result.Log,
+			result,
 		)
 		if updateErr != nil {
 			m.logger.Error("Failed to update compilation status to completed",
-				zap.String("compilation_id", job.CompilationID),
-				zap.Error(updateErr),
-			)
-		}
-
-		// Update metrics
-		if updateErr := m.repo.UpdateMetrics(ctx, compilationID, result.Duration, result.LogSize, result.OutputSize); updateErr != nil {
-			m.logger.Error("Failed to update compilation metrics",
 				zap.String("compilation_id", job.CompilationID),
 				zap.Error(updateErr),
 			)
