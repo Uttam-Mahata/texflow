@@ -27,7 +27,7 @@ WORKDIR /root/
 COPY --from=builder /app/main .
 
 # Copy keys directory if exists
-COPY --from=builder /app/keys ./keys 2>/dev/null || true
+COPY --from=builder /app/keys ./keys
 
 # Expose port
 EXPOSE 8083
