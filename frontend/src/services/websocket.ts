@@ -26,7 +26,9 @@ class WebSocketService {
         return;
       }
 
-      const wsUrl = `${WS_BASE_URL}/ws?project_id=${projectId}&token=${token}`;
+      // Remove trailing slash if present
+      const baseUrl = WS_BASE_URL.endsWith('/') ? WS_BASE_URL.slice(0, -1) : WS_BASE_URL;
+      const wsUrl = `${baseUrl}/${projectId}?token=${token}`;
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
