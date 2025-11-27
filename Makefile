@@ -40,7 +40,19 @@ clean: ## Clean build artifacts
 	rm -rf bin/
 	find . -name "*.log" -delete
 
-docker-up: ## Start all services with Docker Compose
+copy-keys: ## Copy keys to service directories
+	@if [ -d "keys" ]; then \
+		echo "Copying keys to services..."; \
+		cp -r keys services/auth/; \
+		cp -r keys services/project/; \
+		cp -r keys services/websocket/; \
+		cp -r keys services/collaboration/; \
+		cp -r keys services/compilation/; \
+	else \
+		echo "Keys directory not found. Skipping key copy."; \
+	fi
+
+docker-up: copy-keys ## Start all services with Docker Compose
 	docker compose -f deployments/docker/docker-compose.yml up -d
 
 docker-down: ## Stop all services
@@ -71,7 +83,6 @@ lint: ## Run linters
 	golangci-lint run ./...
 
 deps: ## Download dependencies
-	go work sync
 	cd services/auth && go mod download
 	cd services/project && go mod download
 	cd services/websocket && go mod download

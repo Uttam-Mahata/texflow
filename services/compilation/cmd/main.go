@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -76,11 +77,11 @@ func main() {
 
 	// Initialize MinIO client
 	minioClient, err := storage.NewMinIOClient(
-		cfg.MinioEndpoint,
-		cfg.MinioAccessKey,
-		cfg.MinioSecretKey,
-		cfg.MinioBucket,
-		cfg.MinioUseSSL,
+		cfg.MinIOEndpoint,
+		cfg.MinIOAccessKey,
+		cfg.MinIOSecretKey,
+		cfg.MinIOBucket,
+		cfg.MinIOUseSSL,
 		log,
 	)
 	if err != nil {
@@ -101,13 +102,16 @@ func main() {
 		log.Warn("Failed to pull TeX Live image", zap.Error(err))
 	}
 
-	// Initialize JWT validator
-	jwtValidator, err := auth.NewJWTValidator(
+	// Initialize JWT manager
+	jwtManager, err := auth.NewJWTManager(
+		cfg.JWTPrivateKeyPath,
 		cfg.JWTPublicKeyPath,
 		cfg.JWTSecret,
+		15*time.Minute, // access token duration (unused for validation)
+		7*24*time.Hour, // refresh token duration (unused for validation)
 	)
 	if err != nil {
-		log.Fatal("Failed to initialize JWT validator", zap.Error(err))
+		log.Fatal("Failed to initialize JWT manager", zap.Error(err))
 	}
 
 	// Initialize repositories
@@ -132,9 +136,11 @@ func main() {
 		compilationRepo,
 		redisQueue,
 		redisClient,
+		minioClient,
 		log,
 		cfg.EnableCache,
-		cfg.CompilationTimeout,
+		cfg.CacheTTL,
+		cfg.MaxCompilationsPerUser,
 	)
 
 	// Initialize Docker worker
@@ -146,6 +152,7 @@ func main() {
 		cfg.CompilationTimeout,
 		cfg.CompilationMemory,
 		cfg.CompilationCPUs,
+		cfg.CompilationVolume,
 	)
 
 	// Initialize worker manager
@@ -173,7 +180,7 @@ func main() {
 	metricsInst := metrics.NewMetrics("compilation_service")
 
 	// Setup HTTP server
-	router := setupRouter(compilationHandler, jwtValidator, metricsInst, log, cfg.Environment)
+	router := setupRouter(compilationHandler, jwtManager, metricsInst, log, cfg.Environment)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -244,7 +251,7 @@ func pullTexLiveImage(ctx context.Context, dockerClient *client.Client, image st
 	log.Info("Checking TeX Live image", zap.String("image", image))
 
 	// Check if image exists locally
-	images, err := dockerClient.ImageList(ctx, client.ImageListOptions{})
+	images, err := dockerClient.ImageList(ctx, types.ImageListOptions{})
 	if err != nil {
 		return err
 	}
@@ -266,7 +273,7 @@ func pullTexLiveImage(ctx context.Context, dockerClient *client.Client, image st
 
 func setupRouter(
 	compilationHandler *handlers.CompilationHandler,
-	jwtValidator *auth.JWTValidator,
+	jwtManager *auth.JWTManager,
 	metricsInst *metrics.Metrics,
 	log *zap.Logger,
 	environment string,
@@ -291,7 +298,7 @@ func setupRouter(
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
-	v1.Use(middleware.AuthMiddleware(jwtValidator, log))
+	v1.Use(middleware.AuthMiddleware(jwtManager, log))
 	{
 		compilation := v1.Group("/compilation")
 		{
