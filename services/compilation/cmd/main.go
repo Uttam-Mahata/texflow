@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -78,6 +79,7 @@ func main() {
 	// Initialize MinIO client
 	minioClient, err := storage.NewMinIOClient(
 		cfg.MinIOEndpoint,
+		cfg.MinIOPublicEndpoint,
 		cfg.MinIOAccessKey,
 		cfg.MinIOSecretKey,
 		cfg.MinIOBucket,
@@ -266,8 +268,21 @@ func pullTexLiveImage(ctx context.Context, dockerClient *client.Client, image st
 	}
 
 	log.Info("Pulling TeX Live image (this may take a while)...")
-	// Note: In production, you should pull images during deployment
-	// This is just a convenience for development
+
+	// Pull the image
+	reader, err := dockerClient.ImagePull(ctx, image, types.ImagePullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer reader.Close()
+
+	// Read the output to ensure the pull completes
+	_, err = io.Copy(io.Discard, reader)
+	if err != nil {
+		return fmt.Errorf("failed to read pull output: %w", err)
+	}
+
+	log.Info("TeX Live image pulled successfully", zap.String("image", image))
 	return nil
 }
 

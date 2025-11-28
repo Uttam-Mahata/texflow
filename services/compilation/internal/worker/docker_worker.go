@@ -61,11 +61,13 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 		zap.String("compilation_id", job.CompilationID),
 		zap.String("compiler", job.Compiler),
 		zap.String("main_file", job.MainFile),
+		zap.Int("file_count", len(job.Files)),
 	)
 
-	// Create temporary working directory
+	// Create temporary working directory with world-readable permissions
+	// This allows the container (running as nobody:65534) to read/write files
 	projectDir := filepath.Join(w.workDir, job.CompilationID)
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
+	if err := os.MkdirAll(projectDir, 0777); err != nil {
 		return nil, fmt.Errorf("failed to create work directory: %w", err)
 	}
 	defer os.RemoveAll(projectDir)
@@ -242,19 +244,33 @@ func (w *DockerWorker) writeProjectFiles(projectDir string, files map[string]str
 	for filename, content := range files {
 		// Prevent path traversal
 		if strings.Contains(filename, "..") {
+			w.logger.Warn("Skipping file with path traversal attempt", zap.String("filename", filename))
 			continue
 		}
 
-		filePath := filepath.Join(projectDir, filename)
-
-		// Create subdirectories if needed
-		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-			return err
+		// Strip leading slashes to ensure proper path joining
+		cleanFilename := strings.TrimPrefix(filename, "/")
+		if cleanFilename == "" {
+			w.logger.Warn("Skipping empty filename")
+			continue
 		}
 
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-			return err
+		filePath := filepath.Join(projectDir, cleanFilename)
+
+		// Create subdirectories if needed with world-readable permissions
+		if err := os.MkdirAll(filepath.Dir(filePath), 0777); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", cleanFilename, err)
 		}
+
+		// Write file with world-readable permissions for container access
+		if err := os.WriteFile(filePath, []byte(content), 0666); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", cleanFilename, err)
+		}
+
+		w.logger.Debug("Wrote project file",
+			zap.String("filename", cleanFilename),
+			zap.Int("size", len(content)),
+		)
 	}
 
 	return nil

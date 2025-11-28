@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Settings, Users } from 'lucide-react';
 import { api } from '@/services/api';
@@ -21,6 +21,7 @@ export const Editor: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fileContent, setFileContent] = useState<Map<string, string>>(new Map());
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (projectId) {
@@ -60,6 +61,34 @@ export const Editor: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  // Cleanup auto-save timeout on unmount or file change
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [currentFile?.id]);
+
+  // Handle content changes with auto-save (5 second delay)
+  const handleContentChange = useCallback((newContent: string) => {
+    if (!currentFile) return;
+
+    // Update local state
+    setFileContent((prev) => new Map(prev).set(currentFile.id, newContent));
+    setDirty(true);
+
+    // Clear existing auto-save timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Set new auto-save timeout (5 seconds)
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      handleFileSave(newContent);
+    }, 5000);
+  }, [currentFile, setDirty]);
 
   const handleFileSelect = async (file: FileItem) => {
     if (!projectId) return;
@@ -217,6 +246,8 @@ export const Editor: React.FC = () => {
               key={currentFile.id}
               file={currentFile}
               projectId={projectId}
+              content={fileContent.get(currentFile.id) || ''}
+              onChange={handleContentChange}
               onSave={handleFileSave}
             />
           ) : (

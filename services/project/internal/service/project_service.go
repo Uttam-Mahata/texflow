@@ -298,6 +298,8 @@ func (s *ProjectService) CreateFile(ctx context.Context, projectID, userID primi
 	if strings.HasPrefix(cleanPath, "..") {
 		return nil, fmt.Errorf("invalid file path")
 	}
+	// Remove leading slash for storage key
+	cleanPath = strings.TrimPrefix(cleanPath, "/")
 
 	// Calculate hash
 	hash := fmt.Sprintf("%x", sha256.Sum256(req.Content))
@@ -356,6 +358,49 @@ func (s *ProjectService) GetFile(ctx context.Context, fileID, userID primitive.O
 	}
 
 	return file, content, nil
+}
+
+// UpdateFile updates a file's content
+func (s *ProjectService) UpdateFile(ctx context.Context, fileID, userID primitive.ObjectID, req *models.UpdateFileRequest) (*models.File, error) {
+	file, err := s.fileRepo.FindByID(ctx, fileID)
+	if err != nil {
+		return nil, fmt.Errorf("file not found")
+	}
+
+	project, err := s.projectRepo.FindByID(ctx, file.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("project not found")
+	}
+
+	// Check edit access
+	if !s.userCanEdit(project, userID) {
+		return nil, fmt.Errorf("permission denied")
+	}
+
+	// Convert string content to bytes
+	contentBytes := []byte(req.Content)
+
+	// Calculate new hash
+	hash := fmt.Sprintf("%x", sha256.Sum256(contentBytes))
+
+	// Upload to MinIO (overwrites existing file)
+	if err := s.minioClient.UploadBytes(ctx, file.StorageKey, contentBytes, file.ContentType); err != nil {
+		return nil, fmt.Errorf("failed to upload file: %w", err)
+	}
+
+	// Update file record
+	file.SizeBytes = int64(len(contentBytes))
+	file.Hash = hash
+	// Note: Version is incremented by fileRepo.Update()
+
+	if err := s.fileRepo.Update(ctx, file); err != nil {
+		return nil, err
+	}
+
+	// Update project stats
+	s.updateProjectFileStats(ctx, file.ProjectID)
+
+	return file, nil
 }
 
 // Helper methods

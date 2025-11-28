@@ -14,13 +14,14 @@ import (
 
 // MinIOClient wraps MinIO client with additional functionality
 type MinIOClient struct {
-	client *minio.Client
-	bucket string
-	logger *zap.Logger
+	client         *minio.Client
+	publicClient   *minio.Client // Client configured with public endpoint for presigned URLs
+	bucket         string
+	logger         *zap.Logger
 }
 
 // NewMinIOClient creates a new MinIO client
-func NewMinIOClient(endpoint, accessKey, secretKey, bucket string, useSSL bool, logger *zap.Logger) (*MinIOClient, error) {
+func NewMinIOClient(endpoint, publicEndpoint, accessKey, secretKey, bucket string, useSSL bool, logger *zap.Logger) (*MinIOClient, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: useSSL,
@@ -29,10 +30,28 @@ func NewMinIOClient(endpoint, accessKey, secretKey, bucket string, useSSL bool, 
 		return nil, fmt.Errorf("failed to create MinIO client: %w", err)
 	}
 
+	// Create a separate client with the public endpoint for presigned URLs
+	// This is necessary when running in Docker where internal and external hostnames differ
+	publicClient := client
+	if publicEndpoint != "" && publicEndpoint != endpoint {
+		publicClient, err = minio.New(publicEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+			Secure: useSSL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create public MinIO client: %w", err)
+		}
+		logger.Info("Created separate public MinIO client for presigned URLs",
+			zap.String("internal", endpoint),
+			zap.String("public", publicEndpoint),
+		)
+	}
+
 	m := &MinIOClient{
-		client: client,
-		bucket: bucket,
-		logger: logger,
+		client:       client,
+		publicClient: publicClient,
+		bucket:       bucket,
+		logger:       logger,
 	}
 
 	// Ensure bucket exists
@@ -126,8 +145,9 @@ func (m *MinIOClient) DeleteFile(ctx context.Context, objectName string) error {
 }
 
 // GeneratePresignedURL generates a presigned URL for file download
+// Uses the public client so the URL is accessible from browsers
 func (m *MinIOClient) GeneratePresignedURL(ctx context.Context, objectName string, expiry time.Duration) (string, error) {
-	url, err := m.client.PresignedGetObject(ctx, m.bucket, objectName, expiry, nil)
+	url, err := m.publicClient.PresignedGetObject(ctx, m.bucket, objectName, expiry, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
 	}
