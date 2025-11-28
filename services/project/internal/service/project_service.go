@@ -67,6 +67,40 @@ func (s *ProjectService) CreateProject(ctx context.Context, userID primitive.Obj
 		zap.String("user_id", userID.Hex()),
 	)
 
+	// Create default main.tex
+	defaultContent := fmt.Sprintf(`\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{%s}
+\author{TexFlow User}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+Start writing your document here.
+
+\end{document}`, project.Name)
+
+	fileReq := &models.CreateFileRequest{
+		Name:     "main.tex",
+		Path:     "/main.tex",
+		Content:  []byte(defaultContent),
+		IsBinary: false,
+	}
+
+	_, err := s.CreateFile(ctx, project.ID, userID, fileReq)
+	if err != nil {
+		s.logger.Error("Failed to create default main.tex", zap.Error(err))
+		// Clean up project if file creation fails
+		if delErr := s.projectRepo.Delete(ctx, project.ID); delErr != nil {
+			s.logger.Error("Failed to delete project after file creation failure", zap.Error(delErr))
+		}
+		return nil, fmt.Errorf("failed to create default project files: %w", err)
+	}
+
 	return project, nil
 }
 
@@ -83,6 +117,46 @@ func (s *ProjectService) GetProject(ctx context.Context, projectID primitive.Obj
 	}
 
 	return project, nil
+}
+
+// ListFiles retrieves all files for a project (metadata only)
+func (s *ProjectService) ListFiles(ctx context.Context, projectID, userID primitive.ObjectID) ([]*models.File, error) {
+	project, err := s.projectRepo.FindByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !s.userHasAccess(project, userID) {
+		return nil, fmt.Errorf("access denied")
+	}
+
+	files, err := s.fileRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if files == nil {
+		files = []*models.File{}
+	}
+	return files, nil
+}
+
+// GetFileMetadata retrieves file metadata
+func (s *ProjectService) GetFileMetadata(ctx context.Context, fileID, userID primitive.ObjectID) (*models.File, error) {
+	file, err := s.fileRepo.FindByID(ctx, fileID)
+	if err != nil {
+		return nil, err
+	}
+
+	project, err := s.projectRepo.FindByID(ctx, file.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !s.userHasAccess(project, userID) {
+		return nil, fmt.Errorf("access denied")
+	}
+
+	return file, nil
 }
 
 // ListUserProjects lists all projects owned by or shared with a user

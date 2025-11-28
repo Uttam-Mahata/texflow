@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/main.g
 # Runtime stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates wget docker-cli
+RUN apk --no-cache add ca-certificates wget docker-cli texlive
 
 WORKDIR /root/
 

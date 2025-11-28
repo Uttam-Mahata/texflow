@@ -56,7 +56,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(response.user));
       localStorage.setItem('access_token', response.access_token);
       localStorage.setItem('refresh_token', response.refresh_token);
-      localStorage.setItem('expires_at', response.expires_at);
+
+      const expiresAt = new Date(Date.now() + response.expires_in * 1000).toISOString();
+      localStorage.setItem('expires_at', expiresAt);
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -71,7 +73,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(response.user));
       localStorage.setItem('access_token', response.access_token);
       localStorage.setItem('refresh_token', response.refresh_token);
-      localStorage.setItem('expires_at', response.expires_at);
+
+      const expiresAt = new Date(Date.now() + response.expires_in * 1000).toISOString();
+      localStorage.setItem('expires_at', expiresAt);
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;
