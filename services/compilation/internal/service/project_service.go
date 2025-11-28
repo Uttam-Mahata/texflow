@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"compilation/internal/storage"
 	"go.mongodb.org/mongo-driver/bson"
@@ -62,13 +63,23 @@ func (s *ProjectService) GetProjectFiles(ctx context.Context, projectID primitiv
 		if err != nil {
 			s.logger.Error("Failed to download file",
 				zap.String("file", fileDoc.Name),
+				zap.String("storage_key", fileDoc.StorageKey),
 				zap.Error(err),
 			)
 			continue
 		}
 
-		// Use the file path as key
-		files[fileDoc.Path] = string(content)
+		// Use the file path as key, stripping leading slash for proper path handling
+		filePath := strings.TrimPrefix(fileDoc.Path, "/")
+		if filePath == "" {
+			filePath = fileDoc.Name
+		}
+		files[filePath] = string(content)
+
+		s.logger.Debug("File loaded for compilation",
+			zap.String("path", filePath),
+			zap.Int("size", len(content)),
+		)
 	}
 
 	if err := cursor.Err(); err != nil {

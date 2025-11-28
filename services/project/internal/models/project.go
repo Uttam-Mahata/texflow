@@ -84,6 +84,11 @@ type CreateFileRequest struct {
 	IsBinary bool   `json:"is_binary"`
 }
 
+// UpdateFileRequest represents a request to update a file's content
+type UpdateFileRequest struct {
+	Content string `json:"content" binding:"required"`
+}
+
 // ShareProjectRequest represents a request to share a project
 type ShareProjectRequest struct {
 	UserID string `json:"user_id" binding:"required"`

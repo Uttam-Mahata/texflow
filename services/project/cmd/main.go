@@ -102,6 +102,7 @@ func main() {
 			projects.GET("/:id/files", projectHandler.ListFiles)
 			projects.GET("/:id/files/:fileId", projectHandler.GetFileMetadata)
 			projects.GET("/:id/files/:fileId/content", projectHandler.GetFileContent)
+			projects.PUT("/:id/files/:fileId", projectHandler.UpdateFile)
 		}
 	}
 

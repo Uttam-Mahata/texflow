@@ -39,11 +39,18 @@ class WebSocketService {
       };
 
       this.ws.onmessage = (event) => {
-        try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          this.handleMessage(message);
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
+        // Handle potentially batched messages (newline-separated JSON)
+        const data = event.data;
+        if (typeof data === 'string') {
+          const messages = data.split('\n').filter(Boolean);
+          for (const msgStr of messages) {
+            try {
+              const message: WebSocketMessage = JSON.parse(msgStr);
+              this.handleMessage(message);
+            } catch {
+              // Silently ignore non-JSON messages (e.g., binary Yjs updates)
+            }
+          }
         }
       };
 

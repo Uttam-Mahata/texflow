@@ -18,7 +18,7 @@ import type {
   CollaborationMetrics,
 } from '@/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class APIClient {
   private client: AxiosInstance;
@@ -32,12 +32,23 @@ class APIClient {
       },
     });
 
-    // Request interceptor to add auth token
+    // Request interceptor to add auth token and user ID
     this.client.interceptors.request.use(
       (config) => {
         const token = localStorage.getItem('access_token');
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+
+          // Extract user ID from JWT token and add as header
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            // Auth service uses 'user_id' claim in access tokens
+            if (payload.user_id) {
+              config.headers['X-User-ID'] = payload.user_id;
+            }
+          } catch (e) {
+            console.error('Failed to decode JWT token:', e);
+          }
         }
         return config;
       },
@@ -50,7 +61,10 @@ class APIClient {
       async (error: AxiosError) => {
         const originalRequest = error.config as any;
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // Skip refresh logic for auth endpoints to prevent infinite loops
+        const isAuthEndpoint = originalRequest?.url?.includes('/api/v1/auth/');
+
+        if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
           originalRequest._retry = true;
 
           try {
@@ -59,16 +73,24 @@ class APIClient {
               throw new Error('No refresh token');
             }
 
-            const response = await this.refreshToken(refreshToken);
-            localStorage.setItem('access_token', response.access_token);
-            localStorage.setItem('refresh_token', response.refresh_token);
+            // Use axios directly to avoid interceptor loop
+            const response = await axios.post<AuthResponse>(
+              `${API_BASE_URL}/api/v1/auth/refresh`,
+              { refresh_token: refreshToken },
+              { headers: { 'Content-Type': 'application/json' } }
+            );
 
-            originalRequest.headers.Authorization = `Bearer ${response.access_token}`;
+            localStorage.setItem('access_token', response.data.access_token);
+            localStorage.setItem('refresh_token', response.data.refresh_token);
+
+            originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
             return this.client(originalRequest);
           } catch (refreshError) {
             // Refresh failed, logout user
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('expires_at');
             window.location.href = '/login';
             return Promise.reject(refreshError);
           }

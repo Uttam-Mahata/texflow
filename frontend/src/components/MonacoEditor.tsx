@@ -10,15 +10,18 @@ import type { FileItem, UserPresence } from '@/types';
 interface MonacoEditorProps {
   file: FileItem;
   projectId: string;
+  content?: string;
+  onChange?: (content: string) => void;
   onSave?: (content: string) => void;
 }
 
-export const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, projectId, onSave }) => {
+export const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, projectId, content = '', onChange, onSave }) => {
   const { settings, setDirty } = useEditor();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const bindingRef = useRef<MonacoBinding | null>(null);
   const [connectedUsers, setConnectedUsers] = useState<Map<string, UserPresence>>(new Map());
+  const initialContentSetRef = useRef<boolean>(false);
 
   useEffect(() => {
     // Initialize Yjs document
@@ -75,12 +78,23 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, projectId, onS
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
 
+    // Set initial content if provided and not already set
+    if (content && !initialContentSetRef.current) {
+      editor.setValue(content);
+      initialContentSetRef.current = true;
+    }
+
     // Create Monaco binding with Yjs
     if (ydocRef.current) {
       const ytext = ydocRef.current.getText('monaco');
       const model = editor.getModel();
 
       if (model) {
+        // Initialize Yjs text with content if empty
+        if (ytext.length === 0 && content) {
+          ytext.insert(0, content);
+        }
+
         bindingRef.current = new MonacoBinding(
           ytext,
           model,
@@ -94,14 +108,17 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, projectId, onS
     // Add save command (Ctrl+S / Cmd+S)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       if (onSave) {
-        const content = editor.getValue();
-        onSave(content);
+        const currentContent = editor.getValue();
+        onSave(currentContent);
       }
     });
 
-    // Track dirty state
+    // Track dirty state and notify parent of changes
     editor.onDidChangeModelContent(() => {
       setDirty(true);
+      if (onChange) {
+        onChange(editor.getValue());
+      }
     });
 
     // Send cursor updates
@@ -154,16 +171,18 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, projectId, onS
       {connectedUsers.size > 0 && (
         <div className="absolute top-2 right-2 z-10 flex items-center space-x-2 bg-white rounded-md shadow-sm px-3 py-1.5">
           <div className="flex -space-x-2">
-            {Array.from(connectedUsers.values()).map((user) => (
-              <div
-                key={user.user_id}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ring-2 ring-white"
-                style={{ backgroundColor: user.color }}
-                title={user.user_name}
-              >
-                {user.user_name.charAt(0).toUpperCase()}
-              </div>
-            ))}
+            {Array.from(connectedUsers.values())
+              .filter((user) => user && user.user_name)
+              .map((user) => (
+                <div
+                  key={user.user_id}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ring-2 ring-white"
+                  style={{ backgroundColor: user.color || '#6366f1' }}
+                  title={user.user_name}
+                >
+                  {user.user_name.charAt(0).toUpperCase()}
+                </div>
+              ))}
           </div>
           <span className="text-sm text-gray-600">{connectedUsers.size} online</span>
         </div>

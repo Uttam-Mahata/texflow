@@ -24,11 +24,12 @@ type Config struct {
 	RedisDB       int
 
 	// MinIO
-	MinIOEndpoint  string
-	MinIOAccessKey string
-	MinIOSecretKey string
-	MinIOBucket    string
-	MinIOUseSSL    bool
+	MinIOEndpoint       string
+	MinIOPublicEndpoint string // Public endpoint for presigned URLs (accessible from browser)
+	MinIOAccessKey      string
+	MinIOSecretKey      string
+	MinIOBucket         string
+	MinIOUseSSL         bool
 
 	// JWT
 	JWTSecret         string
@@ -103,6 +104,7 @@ func Load() (*Config, error) {
 		RedisPassword:          getEnv("REDIS_PASSWORD", ""),
 		RedisDB:                0,
 		MinIOEndpoint:          getEnv("MINIO_ENDPOINT", "localhost:9000"),
+		MinIOPublicEndpoint:    getEnv("MINIO_PUBLIC_ENDPOINT", getEnv("MINIO_ENDPOINT", "localhost:9000")),
 		MinIOAccessKey:         getEnv("MINIO_ACCESS_KEY", "minioadmin"),
 		MinIOSecretKey:         getEnv("MINIO_SECRET_KEY", "minioadmin"),
 		MinIOBucket:            getEnv("MINIO_BUCKET", "texflow"),

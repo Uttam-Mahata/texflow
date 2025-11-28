@@ -34,7 +34,7 @@ services:
           max_age: 3600
       - name: rate-limiting
         config:
-          minute: 1000
+          minute: 10000
           policy: local
 
   - name: project-service
@@ -64,11 +64,12 @@ services:
             - Content-Type
             - Date
             - Authorization
+            - X-User-ID
           credentials: true
           max_age: 3600
       - name: rate-limiting
         config:
-          minute: 1000
+          minute: 10000
           policy: local
       # - name: jwt
       #   config:
@@ -132,6 +133,7 @@ services:
             - Content-Type
             - Date
             - Authorization
+            - X-User-ID
           credentials: true
           max_age: 3600
 
@@ -159,9 +161,10 @@ services:
             - Content-Type
             - Date
             - Authorization
+            - X-User-ID
           credentials: true
           max_age: 3600
       - name: rate-limiting
         config:
-          minute: 1000
+          minute: 10000
           policy: local
