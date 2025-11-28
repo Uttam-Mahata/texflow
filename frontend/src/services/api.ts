@@ -103,8 +103,8 @@ class APIClient {
 
   // Project API
   async getProjects(): Promise<Project[]> {
-    const response = await this.client.get<Project[]>('/api/v1/projects');
-    return response.data;
+    const response = await this.client.get<{ data: Project[] }>('/api/v1/projects');
+    return response.data.data || [];
   }
 
   async getProject(projectId: string): Promise<Project> {
@@ -137,7 +137,7 @@ class APIClient {
   // File API
   async getProjectFiles(projectId: string): Promise<FileItem[]> {
     const response = await this.client.get<FileItem[]>(`/api/v1/projects/${projectId}/files`);
-    return response.data;
+    return response.data || [];
   }
 
   async getFile(projectId: string, fileId: string): Promise<FileItem> {

@@ -6,6 +6,7 @@ export const Register: React.FC = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -29,7 +30,7 @@ export const Register: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await register({ name, email, password });
+      await register({ email, password, username, full_name: name });
       navigate('/projects');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to register. Please try again.');
@@ -70,6 +71,23 @@ export const Register: React.FC = () => {
                 onChange={(e) => setName(e.target.value)}
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="John Doe"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                Username
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                placeholder="johndoe"
               />
             </div>
 

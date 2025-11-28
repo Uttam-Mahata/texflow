@@ -87,6 +87,24 @@ func main() {
 	router.GET("/health", projectHandler.Health)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
+	// API Routes
+	api := router.Group("/api/v1")
+	{
+		projects := api.Group("/projects")
+		{
+			projects.POST("", projectHandler.CreateProject)
+			projects.GET("", projectHandler.GetProjects)
+			projects.GET("/:id", projectHandler.GetProject)
+			projects.PUT("/:id", projectHandler.UpdateProject)
+			projects.DELETE("/:id", projectHandler.DeleteProject)
+			projects.POST("/:id/share", projectHandler.ShareProject)
+			projects.POST("/:id/files", projectHandler.CreateFile)
+			projects.GET("/:id/files", projectHandler.ListFiles)
+			projects.GET("/:id/files/:fileId", projectHandler.GetFileMetadata)
+			projects.GET("/:id/files/:fileId/content", projectHandler.GetFileContent)
+		}
+	}
+
 	// Start server
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,

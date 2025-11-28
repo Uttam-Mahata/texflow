@@ -20,14 +20,15 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   password: string;
-  name: string;
+  username: string;
+  full_name: string;
 }
 
 export interface AuthResponse {
   user: User;
   access_token: string;
   refresh_token: string;
-  expires_at: string;
+  expires_in: number;
 }
 
 // Project types

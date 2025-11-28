@@ -34,7 +34,7 @@ services:
           max_age: 3600
       - name: rate-limiting
         config:
-          minute: 60
+          minute: 1000
           policy: local
 
   - name: project-service
@@ -68,7 +68,7 @@ services:
           max_age: 3600
       - name: rate-limiting
         config:
-          minute: 100
+          minute: 1000
           policy: local
       # - name: jwt
       #   config:
@@ -163,5 +163,5 @@ services:
           max_age: 3600
       - name: rate-limiting
         config:
-          minute: 20
+          minute: 1000
           policy: local
