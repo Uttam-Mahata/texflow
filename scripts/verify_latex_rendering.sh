@@ -77,8 +77,8 @@ if [ -f "$PROJECT_ROOT/services/compilation/internal/worker/docker_worker.go" ];
     print_success "Docker worker implementation found"
     
     # Check for key features
-    if grep -q "ImagePull" "$PROJECT_ROOT/services/compilation/internal/worker/docker_worker.go"; then
-        print_success "TeX Live image pulling implemented"
+    if grep -q "texliveImage" "$PROJECT_ROOT/services/compilation/internal/worker/docker_worker.go"; then
+        print_success "TeX Live image configuration implemented"
     fi
     
     if grep -q "ContainerCreate" "$PROJECT_ROOT/services/compilation/internal/worker/docker_worker.go"; then
@@ -209,45 +209,13 @@ echo "7. Creating sample LaTeX document..."
 SAMPLE_DIR="$PROJECT_ROOT/test_samples"
 mkdir -p "$SAMPLE_DIR"
 
-cat > "$SAMPLE_DIR/sample.tex" << 'EOF'
-\documentclass{article}
-\usepackage[utf8]{inputenc}
-\usepackage{amsmath}
-
-\title{Sample LaTeX Document}
-\author{TexFlow Test}
-\date{\today}
-
-\begin{document}
-
-\maketitle
-
-\section{Introduction}
-
-This is a sample LaTeX document to verify compilation.
-
-\section{Mathematics}
-
-Here's an equation:
-
-\begin{equation}
-E = mc^2
-\end{equation}
-
-And an integral:
-
-\begin{equation}
-\int_{0}^{\infty} e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
-\end{equation}
-
-\section{Conclusion}
-
-If you can see this as a PDF, LaTeX rendering is working!
-
-\end{document}
-EOF
-
-print_success "Sample LaTeX document created at $SAMPLE_DIR/sample.tex"
+# Copy sample template if it exists
+if [ -f "$SCRIPT_DIR/sample_template.tex" ]; then
+    cp "$SCRIPT_DIR/sample_template.tex" "$SAMPLE_DIR/sample.tex"
+    print_success "Sample LaTeX document created at $SAMPLE_DIR/sample.tex"
+else
+    print_error "Sample template not found at $SCRIPT_DIR/sample_template.tex"
+fi
 echo ""
 
 # 8. Summary
