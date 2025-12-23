@@ -385,6 +385,39 @@ func (h *ProjectHandler) UpdateFile(c *gin.Context) {
 	c.JSON(http.StatusOK, file)
 }
 
+// MigrateLatexFiles migrates existing main.tex files to escape LaTeX special characters
+// This is a one-time migration endpoint to fix files created before the escaping fix
+func (h *ProjectHandler) MigrateLatexFiles(c *gin.Context) {
+	h.logger.Info("Starting LaTeX file migration")
+
+	fixed, errors, err := h.projectService.MigrateLatexFiles(c.Request.Context())
+	if err != nil {
+		h.logger.Error("Migration failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Migration failed",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	response := gin.H{
+		"message": "Migration completed",
+		"files_fixed": fixed,
+		"errors_count": len(errors),
+	}
+
+	if len(errors) > 0 {
+		response["errors"] = errors
+	}
+
+	h.logger.Info("LaTeX migration completed",
+		zap.Int("fixed", fixed),
+		zap.Int("errors", len(errors)),
+	)
+
+	c.JSON(http.StatusOK, response)
+}
+
 // Helper to extract user ID from context (set by auth middleware)
 func getUserID(c *gin.Context) (primitive.ObjectID, error) {
 	// The gateway passes the user ID in a header after JWT validation

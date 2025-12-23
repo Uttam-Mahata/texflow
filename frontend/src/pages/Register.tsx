@@ -17,12 +17,16 @@ export const Register: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
+    // Trim whitespace from inputs
+    const trimmedPassword = password.trim();
+    const trimmedConfirmPassword = confirmPassword.trim();
+
+    if (trimmedPassword !== trimmedConfirmPassword) {
       setError('Passwords do not match');
       return;
     }
 
-    if (password.length < 8) {
+    if (trimmedPassword.length < 8) {
       setError('Password must be at least 8 characters long');
       return;
     }
@@ -30,7 +34,12 @@ export const Register: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await register({ email, password, username, full_name: name });
+      await register({
+        email: email.trim(),
+        password: trimmedPassword,
+        username: username.trim(),
+        full_name: name.trim()
+      });
       navigate('/projects');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to register. Please try again.');
