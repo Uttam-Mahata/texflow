@@ -16,7 +16,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ url }) => {
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('📄 PDFViewer received URL:', url);
+  }, [url]);
+
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    console.log('✅ PDF loaded successfully! Pages:', numPages);
     setNumPages(numPages);
     setPageNumber(1);
   };
@@ -134,8 +140,10 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ url }) => {
             error={
               <div className="p-8 text-center">
                 <p className="text-sm text-red-600">Failed to load PDF</p>
+                <p className="text-xs text-gray-500 mt-2">URL: {url}</p>
               </div>
             }
+            onLoadError={(error) => console.error('❌ PDF load error:', error)}
           >
             <Page
               pageNumber={pageNumber}

@@ -25,14 +25,31 @@ export const CompilationPanel: React.FC<CompilationPanelProps> = ({
       const interval = setInterval(async () => {
         try {
           const updated = await api.getCompilation(currentCompilation.id);
+          console.log('📊 Compilation status update:', {
+            id: updated.id,
+            status: updated.status,
+            output_url: updated.output_url,
+            error: updated.error,
+          });
           setCurrentCompilation(updated);
 
           if (updated.status === 'completed') {
+            console.log('✅ Compilation completed!', {
+              output_url: updated.output_url,
+              has_callback: !!onCompilationComplete,
+            });
             setIsCompiling(false);
             if (updated.output_url && onCompilationComplete) {
+              console.log('🎯 Calling onCompilationComplete with URL:', updated.output_url);
               onCompilationComplete(updated.output_url);
+            } else {
+              console.warn('⚠️ No output_url or callback:', {
+                has_url: !!updated.output_url,
+                has_callback: !!onCompilationComplete,
+              });
             }
           } else if (updated.status === 'failed' || updated.status === 'timeout') {
+            console.error('❌ Compilation failed:', updated.error);
             setIsCompiling(false);
             setError(updated.error || 'Compilation failed');
           }
