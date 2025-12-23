@@ -161,7 +161,9 @@ export const Editor: React.FC = () => {
   };
 
   const handleCompilationComplete = (outputUrl: string) => {
+    console.log('🎬 Editor: handleCompilationComplete called with URL:', outputUrl);
     setPdfUrl(outputUrl);
+    console.log('🎬 Editor: pdfUrl state updated to:', outputUrl);
   };
 
   if (!projectId) {
