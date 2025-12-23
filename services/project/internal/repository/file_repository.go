@@ -95,6 +95,26 @@ func (r *FileRepository) FindByPath(ctx context.Context, projectID primitive.Obj
 	return &file, nil
 }
 
+// FindByName finds all files with a specific name across all projects
+func (r *FileRepository) FindByName(ctx context.Context, name string) ([]*models.File, error) {
+	cursor, err := r.collection.Find(
+		ctx,
+		bson.M{"name": name},
+		options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var files []*models.File
+	if err := cursor.All(ctx, &files); err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
 // Update updates a file record
 func (r *FileRepository) Update(ctx context.Context, file *models.File) error {
 	file.UpdatedAt = time.Now()

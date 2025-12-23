@@ -104,6 +104,9 @@ func main() {
 			projects.GET("/:id/files/:fileId/content", projectHandler.GetFileContent)
 			projects.PUT("/:id/files/:fileId", projectHandler.UpdateFile)
 		}
+
+		// Admin/migration endpoints
+		api.POST("/admin/migrate-latex", projectHandler.MigrateLatexFiles)
 	}
 
 	// Start server

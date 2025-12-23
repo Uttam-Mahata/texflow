@@ -67,7 +67,8 @@ func (s *ProjectService) CreateProject(ctx context.Context, userID primitive.Obj
 		zap.String("user_id", userID.Hex()),
 	)
 
-	// Create default main.tex
+	// Create default main.tex with escaped project name
+	escapedTitle := escapeLatex(project.Name)
 	defaultContent := fmt.Sprintf(`\documentclass{article}
 \usepackage[utf8]{inputenc}
 
@@ -82,7 +83,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, userID primitive.Obj
 \section{Introduction}
 Start writing your document here.
 
-\end{document}`, project.Name)
+\end{document}`, escapedTitle)
 
 	fileReq := &models.CreateFileRequest{
 		Name:     "main.tex",
@@ -460,4 +461,141 @@ func getContentType(filename string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// escapeLatex escapes special LaTeX characters in a string
+func escapeLatex(s string) string {
+	// LaTeX special characters that need escaping: \ # $ % & _ { } ~ ^
+	replacer := strings.NewReplacer(
+		"\\", "\\textbackslash{}",
+		"#", "\\#",
+		"$", "\\$",
+		"%", "\\%",
+		"&", "\\&",
+		"_", "\\_",
+		"{", "\\{",
+		"}", "\\}",
+		"~", "\\textasciitilde{}",
+		"^", "\\textasciicircum{}",
+	)
+	return replacer.Replace(s)
+}
+
+// fixLatexTitle finds \title{...} in LaTeX content and escapes special characters
+func fixLatexTitle(content string) string {
+	// Find \title{...} pattern
+	titleStart := strings.Index(content, "\\title{")
+	if titleStart == -1 {
+		return content // No title found
+	}
+
+	// Find the matching closing brace
+	braceCount := 0
+	titleContentStart := titleStart + 7 // Length of "\title{"
+	titleEnd := -1
+
+	for i := titleContentStart; i < len(content); i++ {
+		if content[i] == '{' {
+			braceCount++
+		} else if content[i] == '}' {
+			if braceCount == 0 {
+				titleEnd = i
+				break
+			}
+			braceCount--
+		}
+	}
+
+	if titleEnd == -1 {
+		return content // No closing brace found
+	}
+
+	// Extract title text
+	titleText := content[titleContentStart:titleEnd]
+
+	// Check if already escaped (contains \_ or \\)
+	if strings.Contains(titleText, "\\_") || strings.Contains(titleText, "\\#") {
+		return content // Already escaped, don't double-escape
+	}
+
+	// Escape the title text
+	escapedTitle := escapeLatex(titleText)
+
+	// Reconstruct the content with escaped title
+	return content[:titleContentStart] + escapedTitle + content[titleEnd:]
+}
+
+// MigrateLatexFiles fixes existing main.tex files with unescaped LaTeX characters
+func (s *ProjectService) MigrateLatexFiles(ctx context.Context) (int, []string, error) {
+	// Find all main.tex files
+	files, err := s.fileRepo.FindByName(ctx, "main.tex")
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to find main.tex files: %w", err)
+	}
+
+	s.logger.Info("Starting LaTeX migration",
+		zap.Int("file_count", len(files)),
+	)
+
+	fixed := 0
+	errors := []string{}
+
+	for _, file := range files {
+		// Download file content from MinIO
+		content, err := s.minioClient.DownloadBytes(ctx, file.StorageKey)
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to download %s: %v", file.StorageKey, err)
+			s.logger.Error(errMsg)
+			errors = append(errors, errMsg)
+			continue
+		}
+
+		// Fix LaTeX title
+		originalContent := string(content)
+		fixedContent := fixLatexTitle(originalContent)
+
+		// Check if content changed
+		if fixedContent == originalContent {
+			s.logger.Debug("File already escaped or no title found",
+				zap.String("file_id", file.ID.Hex()),
+				zap.String("storage_key", file.StorageKey),
+			)
+			continue
+		}
+
+		// Upload fixed content back to MinIO
+		err = s.minioClient.UploadBytes(ctx, file.StorageKey, []byte(fixedContent), "text/x-tex")
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to upload %s: %v", file.StorageKey, err)
+			s.logger.Error(errMsg)
+			errors = append(errors, errMsg)
+			continue
+		}
+
+		// Update file hash and version
+		file.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(fixedContent)))
+		file.SizeBytes = int64(len(fixedContent))
+
+		err = s.fileRepo.Update(ctx, file)
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to update file record %s: %v", file.ID.Hex(), err)
+			s.logger.Error(errMsg)
+			errors = append(errors, errMsg)
+			continue
+		}
+
+		s.logger.Info("Fixed LaTeX file",
+			zap.String("file_id", file.ID.Hex()),
+			zap.String("project_id", file.ProjectID.Hex()),
+		)
+		fixed++
+	}
+
+	s.logger.Info("LaTeX migration completed",
+		zap.Int("total_files", len(files)),
+		zap.Int("fixed", fixed),
+		zap.Int("errors", len(errors)),
+	)
+
+	return fixed, errors, nil
 }

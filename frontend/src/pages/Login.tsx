@@ -16,7 +16,7 @@ export const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await login({ email, password });
+      await login({ email: email.trim(), password: password.trim() });
       navigate('/projects');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to login. Please check your credentials.');
