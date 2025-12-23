@@ -5,55 +5,45 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"compilation/internal/models"
 	"compilation/internal/storage"
 	"go.uber.org/zap"
 )
 
-// DockerWorker handles LaTeX compilation using Docker containers
+// DockerWorker handles LaTeX compilation (now using direct exec instead of Docker)
 type DockerWorker struct {
-	dockerClient  *client.Client
-	minioClient   *storage.MinIOClient
-	logger        *zap.Logger
-	texliveImage  string
-	timeout       time.Duration
-	memoryLimit   int64
-	cpuLimit      int64
-	workDir       string
+	minioClient *storage.MinIOClient
+	logger      *zap.Logger
+	timeout     time.Duration
+	workDir     string
 }
 
-// NewDockerWorker creates a new Docker worker
+// NewDockerWorker creates a new worker
 func NewDockerWorker(
-	dockerClient *client.Client,
+	dockerClient interface{}, // kept for API compatibility, ignored
 	minioClient *storage.MinIOClient,
 	logger *zap.Logger,
-	texliveImage string,
+	texliveImage string, // kept for API compatibility, ignored
 	timeout time.Duration,
-	memoryLimit int64,
-	cpuLimit int64,
+	memoryLimit int64, // kept for API compatibility, ignored
+	cpuLimit int64, // kept for API compatibility, ignored
 	workDir string,
 ) *DockerWorker {
 	return &DockerWorker{
-		dockerClient: dockerClient,
-		minioClient:  minioClient,
-		logger:       logger,
-		texliveImage: texliveImage,
-		timeout:      timeout,
-		memoryLimit:  memoryLimit,
-		cpuLimit:     cpuLimit,
-		workDir:      workDir,
+		minioClient: minioClient,
+		logger:      logger,
+		timeout:     timeout,
+		workDir:     workDir,
 	}
 }
 
-// Compile performs a LaTeX compilation
+// Compile performs a LaTeX compilation using direct exec
 func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) (*models.CompilationResult, error) {
 	startTime := time.Now()
 
@@ -64,10 +54,9 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 		zap.Int("file_count", len(job.Files)),
 	)
 
-	// Create temporary working directory with world-readable permissions
-	// This allows the container (running as nobody:65534) to read/write files
+	// Create temporary working directory
 	projectDir := filepath.Join(w.workDir, job.CompilationID)
-	if err := os.MkdirAll(projectDir, 0777); err != nil {
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create work directory: %w", err)
 	}
 	defer os.RemoveAll(projectDir)
@@ -77,31 +66,14 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 		return nil, fmt.Errorf("failed to write project files: %w", err)
 	}
 
-	// Create Docker container
-	containerID, err := w.createContainer(ctx, projectDir, job.Compiler, job.MainFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create container: %w", err)
-	}
-	defer w.cleanupContainer(ctx, containerID)
-
-	// Start compilation with timeout
+	// Run compilation with timeout
 	timeoutCtx, cancel := context.WithTimeout(ctx, w.timeout)
 	defer cancel()
 
-	if err := w.dockerClient.ContainerStart(timeoutCtx, containerID, types.ContainerStartOptions{}); err != nil {
-		return nil, fmt.Errorf("failed to start container: %w", err)
-	}
+	exitCode, compileErr := w.runCompilation(timeoutCtx, projectDir, job.Compiler, job.MainFile)
 
-	// Wait for completion
-	statusCh, errCh := w.dockerClient.ContainerWait(timeoutCtx, containerID, container.WaitConditionNotRunning)
-	select {
-	case err := <-errCh:
-		if err != nil {
-			return nil, fmt.Errorf("container wait error: %w", err)
-		}
-	case <-statusCh:
-		// Container completed
-	case <-timeoutCtx.Done():
+	// Check for timeout
+	if timeoutCtx.Err() == context.DeadlineExceeded {
 		w.logger.Warn("Compilation timeout",
 			zap.String("compilation_id", job.CompilationID),
 			zap.Duration("timeout", w.timeout),
@@ -114,13 +86,7 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 		}, nil
 	}
 
-	// Get container exit code
-	inspect, err := w.dockerClient.ContainerInspect(ctx, containerID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to inspect container: %w", err)
-	}
-
-	// Copy output files
+	// Process results
 	outputFile := getOutputFileName(job.MainFile, job.Compiler)
 	outputPath := filepath.Join(projectDir, outputFile)
 	logPath := filepath.Join(projectDir, getLogFileName(job.MainFile))
@@ -130,7 +96,7 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 	result.DurationMs = time.Since(startTime).Milliseconds()
 
 	// Check if compilation was successful
-	if inspect.State.ExitCode == 0 && fileExists(outputPath) {
+	if exitCode == 0 && fileExists(outputPath) {
 		// Upload PDF to MinIO
 		pdfKey := fmt.Sprintf("compilations/%s/%s", job.CompilationID, outputFile)
 		if err := w.uploadFile(ctx, pdfKey, outputPath); err != nil {
@@ -157,6 +123,10 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 	} else {
 		// Compilation failed
 		errorMsg := "Compilation failed"
+		if compileErr != nil {
+			errorMsg = compileErr.Error()
+		}
+
 		if fileExists(logPath) {
 			// Upload log for debugging
 			logKey := fmt.Sprintf("compilations/%s/%s", job.CompilationID, filepath.Base(logPath))
@@ -174,7 +144,7 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 		result.ErrorMessage = errorMsg
 		w.logger.Warn("Compilation failed",
 			zap.String("compilation_id", job.CompilationID),
-			zap.Int("exit_code", inspect.State.ExitCode),
+			zap.Int("exit_code", exitCode),
 			zap.String("error", errorMsg),
 		)
 	}
@@ -182,61 +152,56 @@ func (w *DockerWorker) Compile(ctx context.Context, job *models.CompilationJob) 
 	return &result, nil
 }
 
-// createContainer creates a Docker container for compilation
-func (w *DockerWorker) createContainer(ctx context.Context, projectDir, compiler, mainFile string) (string, error) {
+// runCompilation executes the LaTeX compiler directly
+func (w *DockerWorker) runCompilation(ctx context.Context, projectDir, compiler, mainFile string) (int, error) {
 	// Determine compiler command
-	var cmd []string
+	var compilerCmd string
 	switch compiler {
 	case "xelatex":
-		cmd = []string{"xelatex", "-interaction=nonstopmode", "-output-directory=/workspace", mainFile}
+		compilerCmd = "xelatex"
 	case "lualatex":
-		cmd = []string{"lualatex", "-interaction=nonstopmode", "-output-directory=/workspace", mainFile}
-	default: // pdflatex
-		cmd = []string{"pdflatex", "-interaction=nonstopmode", "-output-directory=/workspace", mainFile}
+		compilerCmd = "lualatex"
+	default:
+		compilerCmd = "pdflatex"
 	}
 
-	config := &container.Config{
-		Image:      w.texliveImage,
-		Cmd:        cmd,
-		WorkingDir: "/workspace",
-		User:       "65534:65534", // nobody user
+	// Build command arguments
+	args := []string{
+		"-interaction=nonstopmode",
+		"-output-directory=" + projectDir,
+		filepath.Join(projectDir, mainFile),
 	}
 
-	hostConfig := &container.HostConfig{
-		Binds: []string{
-			fmt.Sprintf("%s:/workspace", projectDir),
-		},
-		Resources: container.Resources{
-			Memory:   w.memoryLimit,
-			NanoCPUs: w.cpuLimit,
-			PidsLimit: func() *int64 {
-				limit := int64(256)
-				return &limit
-			}(),
-		},
-		NetworkMode: "none", // No network access
-		ReadonlyRootfs: false, // TeX needs to write temp files
-		Tmpfs: map[string]string{
-			"/tmp": "rw,noexec,nosuid,size=512m",
-		},
-		SecurityOpt: []string{
-			"no-new-privileges",
-		},
+	w.logger.Info("Running LaTeX compiler",
+		zap.String("compiler", compilerCmd),
+		zap.Strings("args", args),
+	)
+
+	cmd := exec.CommandContext(ctx, compilerCmd, args...)
+	cmd.Dir = projectDir
+
+	// Capture output for debugging
+	output, err := cmd.CombinedOutput()
+
+	// Log output for debugging
+	if len(output) > 0 {
+		w.logger.Debug("Compiler output",
+			zap.String("output", string(output)),
+		)
 	}
 
-	resp, err := w.dockerClient.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
+	// Get exit code
+	exitCode := 0
 	if err != nil {
-		return "", err
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			w.logger.Error("Compilation exec error", zap.Error(err))
+			return -1, err
+		}
 	}
 
-	return resp.ID, nil
-}
-
-// cleanupContainer removes a Docker container
-func (w *DockerWorker) cleanupContainer(ctx context.Context, containerID string) {
-	if err := w.dockerClient.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
-		w.logger.Error("Failed to remove container", zap.String("container_id", containerID), zap.Error(err))
-	}
+	return exitCode, nil
 }
 
 // writeProjectFiles writes project files to disk
@@ -257,13 +222,13 @@ func (w *DockerWorker) writeProjectFiles(projectDir string, files map[string]str
 
 		filePath := filepath.Join(projectDir, cleanFilename)
 
-		// Create subdirectories if needed with world-readable permissions
-		if err := os.MkdirAll(filepath.Dir(filePath), 0777); err != nil {
+		// Create subdirectories if needed
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", cleanFilename, err)
 		}
 
-		// Write file with world-readable permissions for container access
-		if err := os.WriteFile(filePath, []byte(content), 0666); err != nil {
+		// Write file
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", cleanFilename, err)
 		}
 

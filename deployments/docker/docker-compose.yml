@@ -361,8 +361,7 @@ services:
       MAX_COMPILATION_WORKERS: 10
       TEXLIVE_IMAGE: texlive/texlive:latest
       LOG_LEVEL: info
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    # No volumes needed - using direct exec instead of Docker-in-Docker
     networks:
       - texflow-network
     depends_on:
