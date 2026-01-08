@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: texflow-config
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: texflow
+    app.kubernetes.io/part-of: texflow
+data:
+  # MongoDB Configuration
+  MONGO_DATABASE: "texflow"
+
+  # Redis Configuration
+  REDIS_DB: "0"
+
+  # MinIO Configuration
+  MINIO_BUCKET: "texflow"
+  MINIO_USE_SSL: "false"
+
+  # JWT Configuration
+  JWT_ACCESS_TOKEN_EXPIRY: "15m"
+  JWT_REFRESH_TOKEN_EXPIRY: "168h"
+
+  # Compilation Configuration
+  COMPILATION_TIMEOUT: "60s"
+  COMPILATION_MEMORY_LIMIT: "2147483648"
+  COMPILATION_CPU_LIMIT: "2"
+  MAX_COMPILATION_WORKERS: "10"
+  TEXLIVE_IMAGE: "texlive/texlive:latest"
+
+  # Environment
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "info"

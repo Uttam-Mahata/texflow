@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: collaboration-service
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: collaboration-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  ports:
+    - port: 8083
+      targetPort: 8083
+      name: http
+  selector:
+    app.kubernetes.io/name: collaboration-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collaboration-service
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: collaboration-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: collaboration-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: collaboration-service
+        app.kubernetes.io/part-of: texflow
+    spec:
+      containers:
+        - name: collaboration-service
+          image: texflow/collaboration-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+              name: http
+          env:
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: ENVIRONMENT
+            - name: COLLABORATION_SERVICE_PORT
+              value: "8083"
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: MONGO_URI
+            - name: MONGO_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: MONGO_DATABASE
+            - name: REDIS_ADDR
+              value: "redis:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: REDIS_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: JWT_SECRET
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: LOG_LEVEL
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: collaboration-service-hpa
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: collaboration-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: collaboration-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
