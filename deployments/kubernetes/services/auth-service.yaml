@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: auth-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app.kubernetes.io/name: auth-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: auth-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-service
+        app.kubernetes.io/part-of: texflow
+    spec:
+      containers:
+        - name: auth-service
+          image: texflow/auth-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: ENVIRONMENT
+            - name: AUTH_SERVICE_PORT
+              value: "8080"
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: MONGO_URI
+            - name: MONGO_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: MONGO_DATABASE
+            - name: REDIS_ADDR
+              value: "redis:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: REDIS_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: JWT_SECRET
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: LOG_LEVEL
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: auth-service-hpa
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: auth-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: auth-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

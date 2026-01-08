@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: texflow
+  labels:
+    app.kubernetes.io/name: texflow
+    app.kubernetes.io/part-of: texflow
