@@ -36,7 +36,11 @@ labels:
       app.kubernetes.io/part-of: texflow
     includeSelectors: false
 
-# Image customization (update for your container registry)
+# Image customization
+# IMPORTANT: For production deployments, update these with:
+#   1. Your container registry (e.g., newName: your-registry.com/texflow/auth-service)
+#   2. Specific version tags or SHA digests (e.g., newTag: v1.0.0 or newTag: sha256:abc123)
+# Using 'latest' is acceptable for development but NOT recommended for production.
 images:
   - name: texflow/auth-service
     newTag: latest

@@ -330,6 +330,8 @@ metadata:
     app.kubernetes.io/name: kong
     app.kubernetes.io/part-of: texflow
 spec:
+  # Use LoadBalancer for cloud deployments, change to ClusterIP for local/on-prem
+  # and use Ingress or port-forward for access
   type: LoadBalancer
   ports:
     - port: 8000

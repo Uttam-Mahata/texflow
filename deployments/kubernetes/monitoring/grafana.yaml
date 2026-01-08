@@ -56,15 +56,21 @@ spec:
         runAsUser: 472
       containers:
         - name: grafana
-          image: grafana/grafana:latest
+          image: grafana/grafana:10.2.0
           ports:
             - containerPort: 3000
               name: http
           env:
             - name: GF_SECURITY_ADMIN_USER
-              value: "admin"
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: GRAFANA_ADMIN_USER
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: "admin"
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: GRAFANA_ADMIN_PASSWORD
             - name: GF_INSTALL_PLUGINS
               value: "grafana-clock-panel,grafana-simple-json-datasource"
           volumeMounts:
