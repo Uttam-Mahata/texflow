@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: texflow
+
+namespace: texflow
+
+resources:
+  # Base resources
+  - base/namespace.yaml
+  - base/configmap.yaml
+  - base/secrets.yaml
+  - base/ingress.yaml
+  
+  # Infrastructure
+  - infrastructure/mongodb.yaml
+  - infrastructure/redis.yaml
+  - infrastructure/minio.yaml
+  - infrastructure/kong.yaml
+  
+  # Backend services
+  - services/auth-service.yaml
+  - services/project-service.yaml
+  - services/websocket-service.yaml
+  - services/collaboration-service.yaml
+  - services/compilation-service.yaml
+  
+  # Monitoring
+  - monitoring/prometheus.yaml
+  - monitoring/grafana.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+      app.kubernetes.io/part-of: texflow
+    includeSelectors: false
+
+# Image customization
+# IMPORTANT: For production deployments, update these with:
+#   1. Your container registry (e.g., newName: your-registry.com/texflow/auth-service)
+#   2. Specific version tags or SHA digests (e.g., newTag: v1.0.0 or newTag: sha256:abc123)
+# Using 'latest' is acceptable for development but NOT recommended for production.
+images:
+  - name: texflow/auth-service
+    newTag: latest
+  - name: texflow/project-service
+    newTag: latest
+  - name: texflow/websocket-service
+    newTag: latest
+  - name: texflow/collaboration-service
+    newTag: latest
+  - name: texflow/compilation-service
+    newTag: latest
