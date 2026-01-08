@@ -1,0 +1,464 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-database
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: kong-database
+    app.kubernetes.io/part-of: texflow
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app.kubernetes.io/name: kong-database
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong-database
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: kong-database
+    app.kubernetes.io/part-of: texflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kong-database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kong-database
+        app.kubernetes.io/part-of: texflow
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: kong-db-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - kong
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - kong
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: kong-db-data
+          persistentVolumeClaim:
+            claimName: kong-db-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kong-db-data
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: kong-database
+    app.kubernetes.io/part-of: texflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-config
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: kong
+    app.kubernetes.io/part-of: texflow
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    services:
+      - name: auth-service
+        url: http://auth-service:8080
+        routes:
+          - name: auth-routes
+            paths:
+              - /api/v1/auth
+            strip_path: false
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Version
+                - Content-Length
+                - Content-MD5
+                - Content-Type
+                - Date
+                - Authorization
+                - X-Refresh-Token
+              exposed_headers:
+                - X-Auth-Token
+              credentials: true
+              max_age: 3600
+          - name: rate-limiting
+            config:
+              minute: 10000
+              policy: local
+
+      - name: project-service
+        url: http://project-service:8081
+        routes:
+          - name: project-routes
+            paths:
+              - /api/v1/projects
+            strip_path: false
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Version
+                - Content-Length
+                - Content-MD5
+                - Content-Type
+                - Date
+                - Authorization
+                - X-User-ID
+              credentials: true
+              max_age: 3600
+          - name: rate-limiting
+            config:
+              minute: 10000
+              policy: local
+
+      - name: websocket-service
+        url: http://websocket-service:8082
+        routes:
+          - name: websocket-routes
+            paths:
+              - /api/v1/ws
+            strip_path: false
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Version
+                - Content-Length
+                - Content-MD5
+                - Content-Type
+                - Date
+                - Authorization
+                - Upgrade
+                - Connection
+                - Sec-WebSocket-Key
+                - Sec-WebSocket-Version
+                - Sec-WebSocket-Extensions
+                - Sec-WebSocket-Protocol
+              credentials: true
+              max_age: 3600
+
+      - name: collaboration-service
+        url: http://collaboration-service:8083
+        routes:
+          - name: collaboration-routes
+            paths:
+              - /api/v1/collaboration
+            strip_path: false
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Version
+                - Content-Length
+                - Content-MD5
+                - Content-Type
+                - Date
+                - Authorization
+                - X-User-ID
+              credentials: true
+              max_age: 3600
+
+      - name: compilation-service
+        url: http://compilation-service:8084
+        routes:
+          - name: compilation-routes
+            paths:
+              - /api/v1/compilation
+            strip_path: false
+        plugins:
+          - name: cors
+            config:
+              origins:
+                - "*"
+              methods:
+                - GET
+                - POST
+                - OPTIONS
+              headers:
+                - Accept
+                - Accept-Version
+                - Content-Length
+                - Content-MD5
+                - Content-Type
+                - Date
+                - Authorization
+                - X-User-ID
+              credentials: true
+              max_age: 3600
+          - name: rate-limiting
+            config:
+              minute: 10000
+              policy: local
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kong-migration
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: kong-migration
+    app.kubernetes.io/part-of: texflow
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z kong-database 5432; do echo waiting for postgres; sleep 2; done;']
+      containers:
+        - name: kong-migration
+          image: kong:3.4
+          command: ["kong", "migrations", "bootstrap"]
+          env:
+            - name: KONG_DATABASE
+              value: "postgres"
+            - name: KONG_PG_HOST
+              value: "kong-database"
+            - name: KONG_PG_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_DB
+            - name: KONG_PG_USER
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_USER
+            - name: KONG_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_PASSWORD
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: kong
+    app.kubernetes.io/part-of: texflow
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: proxy
+    - port: 8001
+      targetPort: 8001
+      name: admin
+    - port: 8443
+      targetPort: 8443
+      name: proxy-ssl
+  selector:
+    app.kubernetes.io/name: kong
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: kong
+    app.kubernetes.io/part-of: texflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kong
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kong
+        app.kubernetes.io/part-of: texflow
+    spec:
+      initContainers:
+        - name: wait-for-migration
+          image: busybox:1.36
+          command: ['sh', '-c', 'sleep 30']
+        - name: kong-config-import
+          image: kong:3.4
+          command: ["kong", "config", "db_import", "/config/kong.yml"]
+          env:
+            - name: KONG_DATABASE
+              value: "postgres"
+            - name: KONG_PG_HOST
+              value: "kong-database"
+            - name: KONG_PG_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_DB
+            - name: KONG_PG_USER
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_USER
+            - name: KONG_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: kong-config
+              mountPath: /config
+      containers:
+        - name: kong
+          image: kong:3.4
+          ports:
+            - containerPort: 8000
+              name: proxy
+            - containerPort: 8001
+              name: admin
+            - containerPort: 8443
+              name: proxy-ssl
+          env:
+            - name: KONG_DATABASE
+              value: "postgres"
+            - name: KONG_PG_HOST
+              value: "kong-database"
+            - name: KONG_PG_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_DB
+            - name: KONG_PG_USER
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_USER
+            - name: KONG_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: POSTGRES_PASSWORD
+            - name: KONG_PROXY_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_ADMIN_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_PROXY_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_LISTEN
+              value: "0.0.0.0:8001"
+            - name: KONG_PROXY_LISTEN
+              value: "0.0.0.0:8000, 0.0.0.0:8443 ssl"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - kong
+                - health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - kong
+                - health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 10
+      volumes:
+        - name: kong-config
+          configMap:
+            name: kong-config

@@ -1,0 +1,176 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: compilation-service
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: compilation-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  ports:
+    - port: 8084
+      targetPort: 8084
+      name: http
+  selector:
+    app.kubernetes.io/name: compilation-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compilation-service
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: compilation-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: compilation-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: compilation-service
+        app.kubernetes.io/part-of: texflow
+    spec:
+      containers:
+        - name: compilation-service
+          image: texflow/compilation-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+              name: http
+          env:
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: ENVIRONMENT
+            - name: COMPILATION_SERVICE_PORT
+              value: "8084"
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: MONGO_URI
+            - name: MONGO_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: MONGO_DATABASE
+            - name: REDIS_ADDR
+              value: "redis:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: REDIS_PASSWORD
+            - name: MINIO_ENDPOINT
+              value: "minio:9000"
+            - name: MINIO_PUBLIC_ENDPOINT
+              value: "minio:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: MINIO_SECRET_KEY
+            - name: MINIO_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: MINIO_BUCKET
+            - name: MINIO_USE_SSL
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: MINIO_USE_SSL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: texflow-secrets
+                  key: JWT_SECRET
+            - name: COMPILATION_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: COMPILATION_TIMEOUT
+            - name: COMPILATION_MEMORY_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: COMPILATION_MEMORY_LIMIT
+            - name: COMPILATION_CPU_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: COMPILATION_CPU_LIMIT
+            - name: MAX_COMPILATION_WORKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: MAX_COMPILATION_WORKERS
+            - name: TEXLIVE_IMAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: TEXLIVE_IMAGE
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: texflow-config
+                  key: LOG_LEVEL
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: compilation-service-hpa
+  namespace: texflow
+  labels:
+    app.kubernetes.io/name: compilation-service
+    app.kubernetes.io/part-of: texflow
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: compilation-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
